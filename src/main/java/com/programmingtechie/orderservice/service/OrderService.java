@@ -9,6 +9,8 @@ import com.programmingtechie.orderservice.model.OrderLineItems;
 import com.programmingtechie.orderservice.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -24,6 +26,7 @@ import java.util.stream.Stream;
 @Transactional
 @Slf4j
 public class OrderService {
+    Logger logger= LogManager.getLogger(this.getClass());
 
     private final OrderRepository orderRepository;
     private final WebClient.Builder webClientBuilder;
@@ -41,7 +44,7 @@ public class OrderService {
         List<String> skuCodes = order.getOrderLineItemsList().stream()
                 .map(OrderLineItems::getSkuCode)
                 .toList();
-
+logger.info("Checking Inventory");
         //call inventory service to check if the items are in stock
 
         InventoryResponse[] inventoryResponseArray = webClientBuilder.build().get()
@@ -50,6 +53,7 @@ public class OrderService {
                 .retrieve()
                 .bodyToMono(InventoryResponse[].class)
                 .block();
+        logger.info("Received inventory check request for skuCode: {}", skuCodes);
 // Collect SKU codes of products that are not in stock
         List<String> outOfStockProducts = Optional.ofNullable(inventoryResponseArray)
                 .map(Arrays::stream)
@@ -60,9 +64,11 @@ public class OrderService {
 // If there are any products not in stock, throw an exception with a detailed message
         if (!outOfStockProducts.isEmpty()) {
             String errorMessage = ":" + String.join(", ", outOfStockProducts);
+            logger.error("Products not in stock: {}", errorMessage);
             throw new ProductNotInStockException(errorMessage);
         }
         orderRepository.save(order);
+        logger.info("Order Placed");
         return "Order Placed";
     }
 
